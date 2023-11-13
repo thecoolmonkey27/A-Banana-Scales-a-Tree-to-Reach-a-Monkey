@@ -3,6 +3,8 @@ function love.load()
     love.graphics.setDefaultFilter('nearest', 'nearest')
     love.graphics.setLineWidth(2.5)
     love.graphics.setBackgroundColor(1/157, 1/205, 1/216)
+    font = love.graphics.newFont('Lambda-Regular.ttf', 30)
+    love.graphics.setFont(font)
 
     require 'math'
 
@@ -26,6 +28,7 @@ function love.load()
      banana.sprite = love.graphics.newImage('sprites/banana.png')
      o = banana.sprite:getWidth() / 2
      p = banana.sprite:getHeight() / 2
+     banana.best = 0
      
      banana.collider = world:newPolygonCollider({0-o, 9-p, 26-o, 0-p, 26-o, 12-p, 19-o, 21-p, 6-o, 21-p, 0-o, 15-p})
      banana.collider:setRestitution(.3)
@@ -42,9 +45,9 @@ function love.load()
      b = 0
      c = 0
 
-    
     sti = require 'libraries/Simple-Tiled-Implementation-master/sti'
      gameMap = sti('maps/map.lua')
+     
 
      if gameMap.layers['static'] then
         for i, obj in pairs(gameMap.layers['static'].objects) do
@@ -54,20 +57,27 @@ function love.load()
         end
     end
 
-    
+    banana.collider:applyLinearImpulse(0, -100)
     
     cam:lookAt(banana.collider:getX(), banana.collider:getY())
 end
 
 function love.update(dt)
-    
+    cx, cy = cam:position()
+    mx, my = cam:mousePosition()
     banana.x, banana.y = banana.collider:getPosition()
+    banana.x = math.floor(banana.x)
+    banana.y = math.floor(banana.y)
     force = force + dt
     banana.rotation = banana.collider:getAngle()
     --cam:lookAt(banana.x, banana.y)
     cam:lockPosition(math.floor(banana.x), math.floor(banana.y), cam.smooth.damped(2))
     world:update(dt)
     banana.x, banana.y = banana.collider:getPosition()
+
+    if -banana.y > banana.best then
+        banana.best = -banana.y
+    end
 end
 
 function love.draw()
@@ -76,11 +86,21 @@ function love.draw()
     love.graphics.setColor(1, 1, 1, 1)
     cam:attach()
         gameMap:drawTileLayer(gameMap.layers['sky'])
+        love.graphics.push()
+        love.graphics.setColor(1, 1, 1, .7)
+        love.graphics.scale(.5, .5)
+        love.graphics.translate(math.floor(banana.x / 4), math.floor(cy))
+        gameMap:drawTileLayer(gameMap.layers['background'])
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.pop()
+        gameMap:drawTileLayer(gameMap.layers['cave'])
+        gameMap:drawTileLayer(gameMap.layers['vine'])
         gameMap:drawTileLayer(gameMap.layers['Tile Layer 1'])
         love.graphics.draw(banana.sprite, banana.x , banana.y , banana.rotation, 1, 1, banana.sprite:getWidth() / 2, banana.sprite:getHeight() / 2)
         love.graphics.setLineWidth(.5)
         
         if held == true then
+            
             mx, my = cam:mousePosition()
             w = mx - banana.x 
             h = my - banana.y
@@ -94,6 +114,8 @@ function love.draw()
             love.graphics.line(banana.x, banana.y - 15, banana.x + nw * force * 15, banana.y - 15 + nh * force * 15)
         end
     cam:detach()
+
+    love.graphics.print(tostring(math.floor(-banana.y/10))..'  |  '..tostring(math.floor(banana.best/10)), 50, 50)
 end
 
 function love.mousepressed(x, y, button, istouch, presses)
