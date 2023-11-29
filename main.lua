@@ -16,6 +16,11 @@ function love.load()
     love.graphics.setFont(font)
     gamestate = 1
     difficulty = 1
+    
+    assist = false
+        infJumps = false
+        jumpConstant = 1
+
     chance = 20
     monkey = love.graphics.newImage('sprites/monkey.png')
     doMusic = true 
@@ -24,6 +29,8 @@ function love.load()
     resetHeld = false
     timer = 0
     doFullscreen = true
+    cutscene = false
+    time = 0
 
     require 'math'
     require 'libraries/simple-slider'
@@ -38,7 +45,8 @@ function love.load()
      world = wf.newWorld()
      world:setGravity(0, 500)
      world:addCollisionClass('static')
-     world:addCollisionClass('banana')
+     world:addCollisionClass('end')
+     world:addCollisionClass('banana', {ignores = {'end'}})
      world:addCollisionClass('point', {ignores = {'static', 'banana'}})
      
     -- Banana Setup
@@ -88,15 +96,27 @@ function love.load()
             wall:setCollisionClass('static')
         end
     end
+    
+    if gameMap.layers['end'] then 
+        for i, obj in pairs(gameMap.layers['end'].objects) do
+            local wall = world:newRectangleCollider(obj.x, obj.y, obj.width, obj.height)
+            wall:setType('static')
+            wall:setCollisionClass('end')
+        end
+    end
 
     cam:lookAt(banana.collider:getX(), banana.collider:getY())
 
     --sounds
     forest = love.audio.newSource('sounds/forest.mp3', 'stream')
-    forest:setVolume(.6)
+    forest:setVolume(.5)
 
     music = love.audio.newSource('sounds/music.mp3', 'stream')
+    music:setVolume(.5)
     whoosh = love.audio.newSource('sounds/whoosh.mp3', 'static')
+    whoosh:setVolume(.5)
+    click = love.audio.newSource('sounds/click.mp3', 'static')
+    eat = love.audio.newSource('sounds/eat.mp3', 'static')
 
     volumeSlider = newSlider(
         love.graphics.getWidth()/2, 
@@ -144,21 +164,10 @@ function love.update(dt)
         if held == true then
             force = force + dt
         end
-        if resetHeld == true then
-            resetTimer = resetTimer + dt
-            if resetTimer > 1 then
-                banana.collider:setPosition(banana.spawnX, banana.spawnY)
-                resetHeld = false
-                resetTimer = 0
-                timer = 0
-            end 
-        else
-            resetTimer = 0
-        end
             
         banana.rotation = banana.collider:getAngle()
         --cam:lookAt(banana.x, banana.y)
-        if math.sqrt((cx - banana.x)^2  + (cy - banana.y)^2) > 75 or math.sqrt((cx - banana.x)^2  + (cy - banana.y)^2) < -75 then
+        if math.sqrt((cx - banana.x)^2  + (cy - banana.y)^2) > 50 or math.sqrt((cx - banana.x)^2  + (cy - banana.y)^2) < -50 then
             cam:lockPosition(math.floor(banana.x), math.floor(banana.y), cam.smooth.damped(2))
         end
         world:update(dt)
@@ -167,12 +176,36 @@ function love.update(dt)
         if -banana.y > banana.best then
             banana.best = -banana.y
         end
+        if banana.collider:enter('end') then
+            cutscene = true
+            banana.collider:setPosition(-890.00, -2960.00)
+            banana.collider:setAngle(0)
+            banana.collider:setLinearVelocity(0, 0)
+            banana.collider:setAngularVelocity(0)
+            cam:zoomTo(8)
+            eat:play()
+            time = timer
+        end
     end
     if gamestate == 3 then 
         volumeSlider:update()
         sfxSlider:update()
     end
-   
+    if cutscene == true then
+        banana.held = false
+        if not eat:isPlaying() then
+            cutscene = false
+            cam:zoomTo(4)
+            gamestate = 1
+            timer = 0
+            banana.held = false
+            banana.collider:setLinearVelocity(0, 0)
+            banana.collider:setPosition(banana.spawnX, banana.spawnY)
+            banana.collider:setLinearVelocity(0, 0)
+            banana.collider:setAngle(0)
+            reset = true
+        end
+    end
 end
 
 function love.draw()
@@ -199,6 +232,7 @@ function love.draw()
         banana.animations.tutorial:draw(banana.spritesheet, -95, -17 - 55)
         love.graphics.setColor(1, 1, 1, 1)
         
+        love.graphics.draw(monkey, -57*16, -187*16, 0, .15, .15)
         love.graphics.draw(banana.sprite, banana.x , banana.y , banana.rotation, 1, 1, banana.sprite:getWidth() / 2, banana.sprite:getHeight() / 2)
         love.graphics.setLineWidth(.5)
         if debug == true then 
@@ -206,7 +240,6 @@ function love.draw()
         end
         cam:lookAt(math.floor(cx + .5), math.floor(cy + .5))
         if held == true then
-            
             mx, my = cam:mousePosition()
             w = mx - banana.x 
             h = my - banana.y
@@ -229,6 +262,20 @@ function love.draw()
             love.graphics.print('Difficulty: '..tostring(difficulty), love.graphics.getWidth() - 150, 100)
             love.graphics.print(tostring(resetHeld), love.graphics.getWidth() - 150, 125)
             love.graphics.print(tostring(doMusic), love.graphics.getWidth() - 150, 150)
+        end
+        if assist == true then
+            love.graphics.print('Infinite Jumps', love.graphics.getWidth()/2 - 700, 30)
+            if not infJumps then
+                love.graphics.draw(open, love.graphics.getWidth()/2 - 500, 25, 0, 1, 1)
+            else
+                love.graphics.draw(closed, love.graphics.getWidth()/2 - 500, 25, 0, 1, 1)
+            end
+            love.graphics.print('Double Power', love.graphics.getWidth()/2 - 275, 30)
+            if jumpConstant == 1 then
+                love.graphics.draw(open, love.graphics.getWidth()/2 - 100, 25, 0, 1, 1)
+            else
+                love.graphics.draw(closed, love.graphics.getWidth()/2 - 100, 25, 0, 1, 1)
+            end
         end
     end
 
@@ -268,7 +315,9 @@ function love.draw()
         love.graphics.print('Normal', love.graphics.getWidth()/2 - 50, love.graphics.getHeight()/2 - 80)
         love.graphics.draw(clickme, love.graphics.getWidth()/2 - clickme:getWidth()/6, love.graphics.getHeight()/2-clickme:getHeight()/6+55, 0, .3)
         love.graphics.print('Assist', love.graphics.getWidth()/2 - 48, love.graphics.getHeight()/2 + 30)
-
+        if time ~= 0 then
+            love.graphics.print(math.floor(time/60)..' : '..tostring(math.floor(time-math.floor(time/60)*60)), love.graphics.getWidth() / 2 - 60, love.graphics.getHeight() - love.graphics.getHeight() / 4, 0, 2, 2)
+        end
         love.graphics.draw(close, 30, 30, 0, .1, .1)
     end
 
@@ -301,18 +350,25 @@ function love.draw()
 end
 
 function love.mousepressed(x, y, button, istouch, presses)
-    if gamestate == 2 then
-        if button == 1 then
-            force = 0
-            held = true
-        end
-    end
     if gamestate == 1 then
         if x > love.graphics.getWidth()/2 - clickme:getWidth()/6 and x < love.graphics.getWidth()/2 - clickme:getWidth()/6 + clickme:getWidth()/3 then 
             if y > love.graphics.getHeight()/2-clickme:getHeight()/6-55 and y < love.graphics.getHeight()/2-clickme:getHeight()/6-55 + clickme:getHeight()/3 then
+                click:stop()
+                click:play()
                 difficulty = 1
                 gamestate = 2
                 timer = 0
+                jumpConstant = 1
+                infJumps = false
+                if assist then
+                    timer = 0
+                    banana.held = false
+                    banana.collider:setLinearVelocity(0, 0)
+                    banana.collider:setPosition(banana.spawnX, banana.spawnY)
+                    banana.collider:setLinearVelocity(0, 0)
+                    banana.collider:setAngle(0)
+                end
+                assist = false
             end 
         end
         if x > love.graphics.getWidth()/2 - clickme:getWidth()/6 and x < love.graphics.getWidth()/2 - clickme:getWidth()/6 + clickme:getWidth()/3 then 
@@ -320,12 +376,48 @@ function love.mousepressed(x, y, button, istouch, presses)
                 difficulty = 2
                 gamestate = 2
                 timer = 0
+                click:stop()
+                click:play()
+                if not assist then
+                    timer = 0
+                    banana.held = false
+                    banana.collider:setLinearVelocity(0, 0)
+                    banana.collider:setPosition(banana.spawnX, banana.spawnY)
+                    banana.collider:setLinearVelocity(0, 0)
+                    banana.collider:setAngle(0)
+                end
+                assist = true
             end 
         end
         if checkButtonPress(30, 30, x, y, close:getWidth()/10, close:getHeight()/10) then 
             love.event.quit()
         end
     end
+    if gamestate == 2 then
+        if button == 1 then
+            force = 0
+            held = true
+        end
+        if assist then
+            if checkButtonPress(love.graphics.getWidth()/2 - 500, 25, x, y, open:getWidth(), open:getHeight()) then
+                if infJumps then
+                    infJumps = false
+                else
+                    infJumps = true
+                end
+                held = false
+            end
+            if checkButtonPress(love.graphics.getWidth()/2 - 100, 25, x, y, open:getWidth(), open:getHeight()) then
+                if jumpConstant == 1 then
+                    jumpConstant = 1.5
+                else
+                    jumpConstant = 1
+                end
+                held = false
+            end
+        end
+    end
+    
     if gamestate == 3 then
         if checkButtonPress(love.graphics.getWidth()/2 + 50, love.graphics.getHeight()/2 + 70, x, y, open:getWidth(), open:getHeight()) then
             if doFullscreen then
@@ -353,23 +445,31 @@ end
 function love.mousereleased(x, y, button, istouch, presses)
     if gamestate == 2 then
         if button == 1 then
-            mx, my = cam:mousePosition()
-            w = mx - banana.x 
-            h = my - banana.y
-            hyp = math.sqrt(w*w + h*h)
-            nw = w / hyp 
-            nh = h / hyp
-            if force > .8 then
-            force = .8
-            end
-            if #world:queryRectangleArea(banana.x - 15, banana.y, 30, 15) > 1 then
-                whoosh:play()
-            banana.collider:applyLinearImpulse(nw * force * 400, nh * force * 400)
-            held = false
+            if held == true then
+                mx, my = cam:mousePosition()
+                w = mx - banana.x 
+                h = my - banana.y
+                hyp = math.sqrt(w*w + h*h)
+                nw = w / hyp 
+                nh = h / hyp
+                if force > .8 then
+                force = .8
+                end
+                if not infJumps then
+                    if #world:queryRectangleArea(banana.x - 15, banana.y, 30, 15) > 1 then
+                        whoosh:play()
+                        banana.collider:applyLinearImpulse(nw * force * 400 * jumpConstant, nh * force * 400 * jumpConstant)
+                        held = false
+                    end
+                else
+                    whoosh:play()
+                    banana.collider:applyLinearImpulse(nw * force * 400 * jumpConstant, nh * force * 400 * jumpConstant)
+                    held = false
+                end
             end
         end
     end
-    if reset == true then
+    if reset == true and gamestate ~= 1 then
         gamestate = 2
     end
 end
@@ -385,7 +485,7 @@ function love.keypressed(key, scancode, isrepeat)
         end
     end
     if key == 'escape' then
-        if gamestate > 1 and gamestate ~= 3 then
+        if gamestate > 1 and gamestate ~= 3 and gamestate ~= 5 then
             gamestate = 3
             held = false
         elseif gamestate == 3 then
@@ -421,7 +521,9 @@ end
 function checkButtonPress(buttonX, buttonY, mouseX, mouseY, w, h)
     if mouseX > buttonX and mouseX < buttonX + w then
         if mouseY > buttonY and mouseY < buttonY + h then
-            return true 
+            click:stop()
+            click:play()
+            return true
         end 
     end 
 end

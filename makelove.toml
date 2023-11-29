@@ -1,0 +1,15 @@
+name = "Banana"
+default_targets = ["win64"]
+build_directory = "builds"
+
+love_files = [
+    "::git-ls-tree::",
+    "-*/.*",
+    "love-binaries",
+]
+
+icon_file = "sprites/banana.png"
+
+[lovejs]
+title = "Banana"  # used on the resulting web page
+memory = "20000000"  # starting memory of the webpage (default is 20 MB)
